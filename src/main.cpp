@@ -44,6 +44,30 @@ void state_reset(State &state)
 	state.refreshDisplay = true;
 }
 
+void state_init_window(State &state)
+{
+	state.width = getmaxx(stdscr);
+	state.height = getmaxy(stdscr);
+
+	state.wcontent = newwin(state.height - 1, state.width, 0, 0);
+	state.wmenu = newwin(1, state.width, state.height - 1, 0);
+
+	refresh();
+
+	keypad(state.wcontent, true);
+	scrollok(state.wcontent, true);
+
+	wbkgd(state.wmenu, A_REVERSE);
+	wrefresh(state.wmenu);
+}
+
+void ncurses_init()
+{
+	initscr();
+	noecho();
+	raw();
+}
+
 int main (int argc, char *argv[])
 {
 	State state;
@@ -60,6 +84,12 @@ int main (int argc, char *argv[])
 	else if(argc == 2) {
 		// TODO load_file
 	}
+
+	ncurses_init();
+
+	state_init_window(state);
+
+	endwin();
 
 	return 0;
 }
