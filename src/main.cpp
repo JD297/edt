@@ -159,6 +159,43 @@ void display_content(State &state)
 	wmove(state.wcontent, state.cursorY, state.cursorX);
 }
 
+void event_write(State &state)
+{
+	if( (state.key >= 32 && state.key <= 126) || state.key == 10 || state.key == 9)
+	{
+		state.contentIt->insert(state.currentIndex, 1, (char)state.key);
+	}
+
+	// Return key
+	if(state.key == 10)
+	{
+		if(state.currentIndex < state.contentIt->length()-1)
+		{
+			// Insert new line with content after cursor in new line
+			state.content.insert(std::next(state.contentIt), state.contentIt->substr(state.currentIndex+1));
+
+			// Shorten the current line until the cursor
+			*state.contentIt = state.contentIt->substr(0, state.currentIndex+1);
+		}
+		else
+		{
+			// Insert new line empty after current line
+			state.content.insert(std::next(state.contentIt), "");
+		}
+
+		state.contentIt = std::next(state.contentIt);
+
+		state.currentIndex = 0;
+		state.savedIndex = 0;
+	}
+	else if((state.key >= 32 && state.key <= 126) || state.key == 9)
+	{
+		state.currentIndex++;
+		state.savedIndex = state.currentIndex;
+		state.refreshDisplay = false;
+	}
+}
+
 int main (int argc, char *argv[])
 {
 	State state;
@@ -186,6 +223,12 @@ int main (int argc, char *argv[])
 		state.refreshDisplay = true;
 
 		state.key = wgetch(state.wcontent);
+
+		switch(state.key)
+		{
+			default:
+				event_write(state);
+		}
 	}
 
 	endwin();
