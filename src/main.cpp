@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <list>
 
+#define ctrl(x) ((x) & 0x1f)
+
 struct State
 {
 	WINDOW* wcontent;
@@ -88,6 +90,10 @@ int main (int argc, char *argv[])
 	ncurses_init();
 
 	state_init_window(state);
+
+	while (state.key != ctrl('x')) {
+		state.key = wgetch(state.wcontent);
+	}
 
 	endwin();
 
