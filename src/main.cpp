@@ -469,6 +469,42 @@ void event_backspace(State &state)
 	}
 }
 
+void event_delete(State &state)
+{
+	// Last character and last row
+	if(state.currentIndex == state.contentIt->length() && state.content.end() == std::next(state.contentIt))
+	{
+		return;
+	}
+	// Line end: copy next line to this line, delete next line
+	else if(state.currentIndex == state.contentIt->length()-1 && state.contentIt->back() == '\n')
+	{
+		// If the line has more content then "\n"
+		if(std::next(state.contentIt)->length() != 1)
+		{
+			// Remove the paragraph
+			state.contentIt->erase(state.currentIndex, 1);
+
+			// Copy the entire next line to the current line
+			state.contentIt->append(std::next(state.contentIt)->substr(0));
+
+			// Delete the line from where the list was copied from
+			state.content.erase(std::next(state.contentIt));
+		}
+		else if(std::next(state.contentIt)->length() == 1)
+		{
+			// Delete the next line
+			state.content.erase(std::next(state.contentIt));
+		}
+	}
+	else
+	{
+		// Delete character
+		state.contentIt->erase(state.currentIndex, 1);
+		state.refreshDisplay = false;
+	}
+}
+
 int main (int argc, char *argv[])
 {
 	State state;
@@ -514,6 +550,9 @@ int main (int argc, char *argv[])
 			break;
 			case KEY_BACKSPACE:
 				event_backspace(state);
+			break;
+			case KEY_DC:
+				event_delete(state);
 			break;
 			default:
 				event_write(state);
