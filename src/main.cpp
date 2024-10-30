@@ -423,6 +423,52 @@ void event_down(State &state)
 	}
 }
 
+void event_backspace(State &state)
+{
+	// If at beginning of line and current line is not the first line
+	if(state.currentIndex == 0 && state.contentIt != state.content.begin())
+	{
+		scroll_up(state);
+
+		// When the line has no content with exception of "\n"
+		if(std::prev(state.contentIt)->length() != 1)
+		{
+			state.contentIt = std::prev(state.contentIt);
+
+			state.currentIndex = state.contentIt->length()-1;
+			state.savedIndex = state.contentIt->length()-1;
+
+			if(state.contentIt->length() > 0) {
+				// Append the complete line to the previous line
+				state.contentIt->append(std::next(state.contentIt)->substr(0));
+
+				// Delete the first line break in the current line
+				state.contentIt->erase(state.contentIt->find("\n"), 1);
+			}
+
+			// Delete the line from where the list was copied from
+			state.content.erase(std::next(state.contentIt));
+		}
+		else if(std::prev(state.contentIt)->length() == 1)
+		{
+			// Delete the previous line with the "\n". The line will be poped one row up
+			state.content.erase(std::prev(state.contentIt));
+
+			state.currentIndex = 0;
+			state.savedIndex = 0;
+		}
+	}
+	else if(!(state.currentIndex == 0 && state.contentIt == state.content.begin()))
+	{
+		// Deletes the character that is in front of the cursor
+		state.contentIt->erase(state.currentIndex-1, 1);
+
+		state.currentIndex--;
+		state.savedIndex = state.currentIndex;
+		state.refreshDisplay = false;
+	}
+}
+
 int main (int argc, char *argv[])
 {
 	State state;
@@ -465,6 +511,9 @@ int main (int argc, char *argv[])
 			break;
 			case KEY_DOWN:
 				event_down(state);
+			break;
+			case KEY_BACKSPACE:
+				event_backspace(state);
 			break;
 			default:
 				event_write(state);
