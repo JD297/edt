@@ -307,6 +307,45 @@ void load_file(State &state, const char* filename)
 	wrefresh(state.wmenu);
 }
 
+void scroll_down(State &state)
+{
+	if(state.contentIt == displayLastIt(state))
+	{
+		state.entryLine++;
+		wscrl(state.wcontent, 1);
+	}
+}
+
+void event_right(State &state)
+{
+	state.refreshDisplay = false;
+
+	const auto itEnd = std::prev(state.content.end());
+
+	if(state.currentIndex < state.contentIt->length()-1 ||
+	  (state.currentIndex < state.contentIt->length() && state.contentIt == itEnd)
+	)
+	{
+		if(state.currentIndex == state.contentIt->length() && state.contentIt->back() != '\n')
+		{
+			return;
+		}
+
+		state.refreshDisplay = false;
+		state.currentIndex++;
+		state.savedIndex = state.currentIndex;
+	}
+	else if(state.contentIt != itEnd)
+	{
+		state.contentIt = std::next(state.contentIt);
+
+		scroll_down(state);
+
+		state.currentIndex = 0;
+		state.savedIndex = 0;
+	}
+}
+
 int main (int argc, char *argv[])
 {
 	State state;
@@ -338,6 +377,9 @@ int main (int argc, char *argv[])
 
 		switch(state.key)
 		{
+			case KEY_RIGHT:
+				event_right(state);
+			break;
 			default:
 				event_write(state);
 		}
