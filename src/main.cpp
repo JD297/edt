@@ -375,6 +375,33 @@ void event_right(State &state)
 	}
 }
 
+void event_down(State &state)
+{
+	state.refreshDisplay = false;
+
+	if(state.contentIt == std::prev(state.content.end()))
+	{
+		return;
+	}
+
+	state.contentIt = std::next(state.contentIt);
+
+	scroll_down(state);
+
+	if(state.contentIt->length() <= state.savedIndex && state.contentIt == std::prev(state.content.end()))
+	{
+		state.currentIndex = state.contentIt->length();
+	}
+	else if(state.contentIt->length()-1 < state.savedIndex)
+	{
+		state.currentIndex = state.contentIt->length()-1;
+	}
+	else
+	{
+		state.currentIndex = state.savedIndex;
+	}
+}
+
 int main (int argc, char *argv[])
 {
 	State state;
@@ -411,6 +438,9 @@ int main (int argc, char *argv[])
 			break;
 			case KEY_RIGHT:
 				event_right(state);
+			break;
+			case KEY_DOWN:
+				event_down(state);
 			break;
 			default:
 				event_write(state);
