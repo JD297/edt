@@ -425,15 +425,39 @@ void event_down(State &state)
 
 void event_page_up(State &state)
 {
-	if(state.entryLine < state.height)
+	if((int)state.entryLine < getmaxy(state.wcontent))
 	{
 		state.entryLine = 0;
 		state.contentIt = state.content.begin();
 	}
 	else
 	{
-		state.entryLine -= state.height;
-		state.contentIt = std::prev(state.contentIt, state.height);
+		state.entryLine -= getmaxy(state.wcontent);
+		state.contentIt = std::prev(state.contentIt, getmaxy(state.wcontent));
+	}
+
+	state.currentIndex = 0;
+	state.savedIndex = 0;
+}
+
+void event_page_down(State &state)
+{
+	if(state.entryLine > state.content.size() - getmaxy(state.wcontent))
+	{
+		state.contentIt = std::prev(state.content.end());
+	}
+	else
+	{
+		state.entryLine += getmaxy(state.wcontent);
+
+		if(std::distance(state.contentIt, state.content.end()) > getmaxy(state.wcontent))
+		{
+			state.contentIt = std::next(state.contentIt, getmaxy(state.wcontent));
+		}
+		else
+		{
+			state.contentIt = std::prev(state.content.end());
+		}
 	}
 
 	state.currentIndex = 0;
@@ -590,6 +614,9 @@ int main (int argc, char *argv[])
 			break;
 			case KEY_PPAGE:
 				event_page_up(state);
+			break;
+			case KEY_NPAGE:
+				event_page_down(state);
 			break;
 			case KEY_BACKSPACE:
 				event_backspace(state);
