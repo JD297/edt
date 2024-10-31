@@ -423,6 +423,23 @@ void event_down(State &state)
 	}
 }
 
+void event_page_up(State &state)
+{
+	if(state.entryLine < state.height)
+	{
+		state.entryLine = 0;
+		state.contentIt = state.content.begin();
+	}
+	else
+	{
+		state.entryLine -= state.height;
+		state.contentIt = std::prev(state.contentIt, state.height);
+	}
+
+	state.currentIndex = 0;
+	state.savedIndex = 0;
+}
+
 void event_backspace(State &state)
 {
 	// If at beginning of line and current line is not the first line
@@ -570,6 +587,9 @@ int main (int argc, char *argv[])
 			break;
 			case KEY_DOWN:
 				event_down(state);
+			break;
+			case KEY_PPAGE:
+				event_page_up(state);
 			break;
 			case KEY_BACKSPACE:
 				event_backspace(state);
