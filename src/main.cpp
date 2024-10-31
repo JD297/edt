@@ -70,6 +70,95 @@ void ncurses_init()
 	raw();
 }
 
+std::list<std::string>::iterator displayFirstIt(State &state)
+{
+	return std::next(state.content.begin(), state.entryLine);
+}
+
+std::list<std::string>::iterator displayLastIt(State &state)
+{
+	const auto itBegin = displayFirstIt(state);
+
+	return state.entryLine + getmaxy(state.wcontent) >= state.content.size() ? state.content.end() : std::next(itBegin, getmaxy(state.wcontent));
+}
+
+std::string display_convert_line(std::string line)
+{
+	if (line.back() == '\n')
+	{
+		line.pop_back();
+	}
+
+	for (std::size_t pos = 0; pos < line.length(); pos++)
+	{
+		if (line.at(pos) != '\t')
+		{
+			continue;
+		}
+
+		line.erase(pos , 1);
+
+		do
+		{
+			line.insert(pos, 1, ' ');
+			pos++;
+		} while (pos % TABSIZE);
+	}
+
+	return line;
+}
+
+void display_content(State &state)
+{
+	if(state.refreshDisplay == true)
+	{
+		wclear(state.wcontent);
+	}
+
+	const auto itBegin = state.refreshDisplay == true ? displayFirstIt(state) : state.contentIt;
+	const auto itEnd = state.refreshDisplay == true ? displayLastIt(state) : std::next(state.contentIt, 1);
+
+	for(auto it = itBegin; it != itEnd; it++)
+	{
+		int initalCursorY = getcury(state.wcontent);
+
+		std::string itValue = display_convert_line(*it);
+
+		bool nextLine = true;
+
+		if(state.contentIt == it)
+		{
+			state.cursorY = distance(displayFirstIt(state), state.contentIt);
+			wmove(state.wcontent, state.cursorY, 0);
+			wprintw(state.wcontent, "%s", state.contentIt->substr(0, state.currentIndex).c_str());
+			getyx(state.wcontent, state.cursorY, state.cursorX);
+			wmove(state.wcontent, state.cursorY, 0);
+		}
+
+		// Last line to print to screen
+		if(it != std::prev(state.content.end()) && it == std::prev(itEnd) && it->at(it->length() - 1) == '\n')
+		{
+			nextLine = false;
+		}
+
+		wprintw(state.wcontent, "%s", itValue.substr(0, getmaxx(state.wcontent) - 1).c_str());
+
+		if(itValue.length() > (std::size_t)getmaxx(state.wcontent))
+		{
+			wattron(state.wcontent, A_REVERSE);
+			wprintw(state.wcontent, "%s", ">");
+			wattroff(state.wcontent, A_REVERSE);
+		}
+
+		if(nextLine == true)
+		{
+			wmove(state.wcontent, initalCursorY + 1, 0);
+		}
+	}
+
+	wmove(state.wcontent, state.cursorY, state.cursorX);
+}
+
 int main (int argc, char *argv[])
 {
 	State state;
@@ -92,6 +181,10 @@ int main (int argc, char *argv[])
 	state_init_window(state);
 
 	while (state.key != ctrl('x')) {
+		display_content(state);
+
+		state.refreshDisplay = true;
+
 		state.key = wgetch(state.wcontent);
 	}
 
