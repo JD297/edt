@@ -505,6 +505,13 @@ void event_delete(State &state)
 	}
 }
 
+void event_pos_begin(State &state)
+{
+	state.currentIndex = 0;
+	state.savedIndex = 0;
+	state.refreshDisplay = false;
+}
+
 int main (int argc, char *argv[])
 {
 	State state;
@@ -553,6 +560,9 @@ int main (int argc, char *argv[])
 			break;
 			case KEY_DC:
 				event_delete(state);
+			break;
+			case KEY_HOME:
+				event_pos_begin(state);
 			break;
 			default:
 				event_write(state);
