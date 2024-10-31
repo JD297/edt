@@ -3,9 +3,22 @@
 #include <string>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 #include <list>
+#include <unistd.h>
 
 #define ctrl(x) ((x) & 0x1f)
+
+#define NEW_FILE "NEW_FILE"
+#define FAIL_READ "FAIL READ"
+
+#define IS_DIRECTORY "IS DIRECTORY"
+#define IS_BLOCK_FILE "IS BLOCK DEVICE"
+#define IS_CHARACTER_FILE "IS CHARACTER DEVICE"
+#define IS_FIFO "IS FIFO"
+#define IS_SOCKET "IS SOCKET"
+#define IS_SYMLINK "IS SYMLINK"
+#define IS_NOT_REGULAR_FILE "IS NOT REGULAR FILE"
 
 struct State
 {
@@ -196,6 +209,104 @@ void event_write(State &state)
 	}
 }
 
+void load_file(State &state, const char* filename)
+{
+	state_reset(state); // TODO in this the correct position for this call??
+
+	struct stat sb;
+
+	if (stat(filename, &sb) == -1 && errno != ENOENT) {
+		state.filename = std::string(filename);
+
+		// when color support is enabled this should be: COLOR_RED
+		wprintw(state.wmenu, " \"%s\" [%s]", filename, FAIL_READ);
+		wrefresh(state.wmenu);
+
+		return;
+	}
+
+	if (access(filename, F_OK) == -1)
+	{
+		state.filename = std::string(filename);
+
+		wprintw(state.wmenu, " \"%s\" [%s]", filename, NEW_FILE);
+		wrefresh(state.wmenu);
+
+		return;
+	}
+
+	switch (sb.st_mode & S_IFMT) {
+		case S_IFBLK: // when color support is enabled this should be: COLOR_YELLOW
+			wprintw(state.wmenu, " \"%s\" [%s]", filename, IS_BLOCK_FILE);
+			wrefresh(state.wmenu);
+			return;
+		case S_IFCHR: // when color support is enabled this should be: COLOR_YELLOW
+			wprintw(state.wmenu, " \"%s\" [%s]", filename, IS_CHARACTER_FILE);
+			wrefresh(state.wmenu);
+			return;
+		case S_IFDIR: // when color support is enabled this should be: COLOR_RED
+			wprintw(state.wmenu, " \"%s\" [%s]", filename, IS_DIRECTORY);
+			wrefresh(state.wmenu);
+			return;
+		case S_IFIFO: // when color support is enabled this should be: COLOR_YELLOW
+			wprintw(state.wmenu, " \"%s\" [%s]", filename, IS_FIFO);
+			wrefresh(state.wmenu);
+			return;
+		case S_IFLNK: // when color support is enabled this should be: COLOR_YELLOW
+			wprintw(state.wmenu, " \"%s\" [%s]", filename, IS_SYMLINK);
+			wrefresh(state.wmenu);
+			return;
+		case S_IFSOCK: // when color support is enabled this should be: COLOR_YELLOW
+			wprintw(state.wmenu, " \"%s\" [%s]", filename, IS_SOCKET);
+			wrefresh(state.wmenu);
+			return;
+		case !S_IFREG: // when color support is enabled this should be: COLOR_YELLOW
+			wprintw(state.wmenu, " \"%s\" [%s]", filename, IS_NOT_REGULAR_FILE);
+			wrefresh(state.wmenu);
+			return;
+    }
+
+	FILE* fp;
+	char * line = NULL;
+	size_t len = 0;
+	ssize_t read;
+
+	fp = fopen(filename, "r");
+
+	if (fp == NULL)
+	{
+		// when color support is enabled this should be: COLOR_RED
+		wprintw(state.wmenu, " \"%s\" [%s]", filename, FAIL_READ);
+		wrefresh(state.wmenu);
+
+		return;
+	}
+
+	state.content.clear();
+
+	while ((read = getline(&line, &len, fp)) != -1)
+	{
+		std::string sline;
+		sline = line;
+
+		state.content.emplace_back(sline);
+	}
+
+	fclose(fp);
+
+	if (line)
+	{
+		free(line);
+	}
+
+	state.filename = std::string(filename);
+
+	state.contentIt = state.content.begin();
+
+	wprintw(state.wmenu, " \"%s\"", filename);
+	wrefresh(state.wmenu);
+}
+
 int main (int argc, char *argv[])
 {
 	State state;
@@ -209,13 +320,14 @@ int main (int argc, char *argv[])
 
 		exit(1);
 	}
-	else if(argc == 2) {
-		// TODO load_file
-	}
 
 	ncurses_init();
 
 	state_init_window(state);
+
+	if(argc == 2) {
+		load_file(state, argv[1]);
+	}
 
 	while (state.key != ctrl('x')) {
 		display_content(state);
