@@ -512,6 +512,22 @@ void event_pos_begin(State &state)
 	state.refreshDisplay = false;
 }
 
+void event_pos_end(State &state)
+{
+	if(state.contentIt != std::prev(state.content.end()))
+	{
+		state.currentIndex = state.contentIt->length()-1;
+		state.savedIndex = state.contentIt->length()-1;
+	}
+	else
+	{
+		state.currentIndex = state.contentIt->length();
+		state.savedIndex = state.contentIt->length();
+	}
+
+	state.refreshDisplay = false;
+}
+
 int main (int argc, char *argv[])
 {
 	State state;
@@ -563,6 +579,9 @@ int main (int argc, char *argv[])
 			break;
 			case KEY_HOME:
 				event_pos_begin(state);
+			break;
+			case KEY_END:
+				event_pos_end(state);
 			break;
 			default:
 				event_write(state);
