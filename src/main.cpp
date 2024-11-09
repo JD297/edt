@@ -71,9 +71,6 @@ void state_init_window(State &state)
 
 	keypad(state.wcontent, true);
 	scrollok(state.wcontent, true);
-
-	wbkgd(state.wmenu, A_REVERSE);
-	wrefresh(state.wmenu);
 }
 
 void ncurses_init()
