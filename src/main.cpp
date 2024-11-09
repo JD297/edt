@@ -4,6 +4,7 @@
 #include <string>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <list>
 #include <unistd.h>
@@ -233,9 +234,23 @@ void edt_open(State &state, const char* filename)
 	state.filename = std::string(filename);
 
 	state.contentIt = state.content.begin();
+}
 
-	wprintw(state.wmenu, "\"%s\"", filename);
-	wrefresh(state.wmenu);
+void edt_write(State &state)
+{
+	FILE* fp;
+
+	if ((fp = fopen(state.filename.c_str(), "w")) == NULL) {
+		wprintw(state.wmenu, "%s: fopen: %s", TARGET, strerror(errno));
+		wrefresh(state.wmenu);
+		return;
+	}
+
+	for(auto it = state.content.begin(); it != state.content.end(); it++) {
+		fwrite(it->c_str(), sizeof(char), strlen(it->c_str()), fp);
+	}
+
+	fclose(fp);
 }
 
 void scroll_up(State &state)
@@ -555,6 +570,9 @@ int main (int argc, char *argv[])
 			break;
 			case KEY_END:
 				event_pos_end(state);
+			break;
+			case ctrl('s'):
+				edt_write(state);
 			break;
 			default:
 				event_write(state);
