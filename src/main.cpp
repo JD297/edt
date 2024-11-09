@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <curses.h>
+#include <err.h>
 #include <string>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,17 +9,6 @@
 #include <unistd.h>
 
 #define ctrl(x) ((x) & 0x1f)
-
-#define NEW_FILE "NEW_FILE"
-#define FAIL_READ "FAIL READ"
-
-#define IS_DIRECTORY "IS DIRECTORY"
-#define IS_BLOCK_FILE "IS BLOCK DEVICE"
-#define IS_CHARACTER_FILE "IS CHARACTER DEVICE"
-#define IS_FIFO "IS FIFO"
-#define IS_SOCKET "IS SOCKET"
-#define IS_SYMLINK "IS SYMLINK"
-#define IS_NOT_REGULAR_FILE "IS NOT REGULAR FILE"
 
 struct State
 {
@@ -47,7 +37,6 @@ void state_reset(State &state)
 {
 	state.key = 0;
 	state.content.clear();
-	state.content.emplace_back("");
 	state.contentIt = state.content.begin();
 	state.currentIndex = 0;
 	state.savedIndex = 0;
@@ -207,101 +196,45 @@ void event_write(State &state)
 	}
 }
 
-void load_file(State &state, const char* filename)
+void edt_open(State &state, const char* filename)
 {
-	state_reset(state); // TODO in this the correct position for this call??
-
 	struct stat sb;
 
-	if (stat(filename, &sb) == -1 && errno != ENOENT) {
-		state.filename = std::string(filename);
-
-		// when color support is enabled this should be: COLOR_RED
-		wprintw(state.wmenu, " \"%s\" [%s]", filename, FAIL_READ);
-		wrefresh(state.wmenu);
-
-		return;
+	if (stat(filename, &sb) == -1) {
+		err(EXIT_FAILURE, "stat");
 	}
 
-	if (access(filename, F_OK) == -1)
-	{
-		state.filename = std::string(filename);
-
-		wprintw(state.wmenu, " \"%s\" [%s]", filename, NEW_FILE);
-		wrefresh(state.wmenu);
-
-		return;
+	if ((sb.st_mode & S_IFMT) != S_IFREG) {
+		fprintf(stderr, "edt: %s: Not a regular file\n", filename);
+		exit(EXIT_FAILURE);
 	}
-
-	switch (sb.st_mode & S_IFMT) {
-		case S_IFBLK: // when color support is enabled this should be: COLOR_YELLOW
-			wprintw(state.wmenu, " \"%s\" [%s]", filename, IS_BLOCK_FILE);
-			wrefresh(state.wmenu);
-			return;
-		case S_IFCHR: // when color support is enabled this should be: COLOR_YELLOW
-			wprintw(state.wmenu, " \"%s\" [%s]", filename, IS_CHARACTER_FILE);
-			wrefresh(state.wmenu);
-			return;
-		case S_IFDIR: // when color support is enabled this should be: COLOR_RED
-			wprintw(state.wmenu, " \"%s\" [%s]", filename, IS_DIRECTORY);
-			wrefresh(state.wmenu);
-			return;
-		case S_IFIFO: // when color support is enabled this should be: COLOR_YELLOW
-			wprintw(state.wmenu, " \"%s\" [%s]", filename, IS_FIFO);
-			wrefresh(state.wmenu);
-			return;
-		case S_IFLNK: // when color support is enabled this should be: COLOR_YELLOW
-			wprintw(state.wmenu, " \"%s\" [%s]", filename, IS_SYMLINK);
-			wrefresh(state.wmenu);
-			return;
-		case S_IFSOCK: // when color support is enabled this should be: COLOR_YELLOW
-			wprintw(state.wmenu, " \"%s\" [%s]", filename, IS_SOCKET);
-			wrefresh(state.wmenu);
-			return;
-		case !S_IFREG: // when color support is enabled this should be: COLOR_YELLOW
-			wprintw(state.wmenu, " \"%s\" [%s]", filename, IS_NOT_REGULAR_FILE);
-			wrefresh(state.wmenu);
-			return;
-    }
 
 	FILE* fp;
-	char * line = NULL;
-	size_t len = 0;
-	ssize_t read;
 
-	fp = fopen(filename, "r");
-
-	if (fp == NULL)
-	{
-		// when color support is enabled this should be: COLOR_RED
-		wprintw(state.wmenu, " \"%s\" [%s]", filename, FAIL_READ);
-		wrefresh(state.wmenu);
-
-		return;
+	if ((fp = fopen(filename, "r")) == NULL) {
+		err(EXIT_FAILURE, "fopen");
 	}
 
-	state.content.clear();
+	if (sb.st_size == 0) {
+		state.content.emplace_back("");
+	} else {
+		char * line = NULL;
+		size_t len = 0;
+		ssize_t nread;
 
-	while ((read = getline(&line, &len, fp)) != -1)
-	{
-		std::string sline;
-		sline = line;
+		while ((nread = getline(&line, &len, fp)) != -1) {
+			state.content.emplace_back(std::string(line));
+		}
 
-		state.content.emplace_back(sline);
-	}
-
-	fclose(fp);
-
-	if (line)
-	{
 		free(line);
+		fclose(fp);
 	}
 
 	state.filename = std::string(filename);
 
 	state.contentIt = state.content.begin();
 
-	wprintw(state.wmenu, " \"%s\"", filename);
+	wprintw(state.wmenu, "\"%s\"", filename);
 	wrefresh(state.wmenu);
 }
 
@@ -569,25 +502,20 @@ void event_pos_end(State &state)
 
 int main (int argc, char *argv[])
 {
-	State state;
+	if(argc != 2)
+	{
+		fprintf(stderr, "Usage: %s [FILE]\n", TARGET);
+		exit(EXIT_FAILURE);
+	}
 
+	State state;
 	state_reset(state);
 
-	if(argc >= 3)
-	{
-		fprintf(stderr, "%s: invalid argument -- \'%s\'\n", TARGET, argv[2]);
-		fprintf(stderr, "usage: %s [path/to/file]\n", TARGET);
-
-		exit(1);
-	}
+	edt_open(state, argv[1]);
 
 	ncurses_init();
 
 	state_init_window(state);
-
-	if(argc == 2) {
-		load_file(state, argv[1]);
-	}
 
 	while (state.key != ctrl('x')) {
 		display_content(state);
