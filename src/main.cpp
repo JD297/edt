@@ -146,6 +146,7 @@ void display_content(State &state)
 			wprintw(state.wcontent, "%s", state.contentIt->substr(0, state.currentIndex).c_str());
 			getyx(state.wcontent, state.cursorY, state.cursorX);
 			wmove(state.wcontent, state.cursorY, 0);
+			wclrtoeol(state.wcontent);
 		}
 
 		// Last line to print to screen
