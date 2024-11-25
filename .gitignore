@@ -1,2 +1,5 @@
-edt
-*.o
+bin/*
+!bin/.gitkeep
+
+build/*
+!build/.gitkeep

@@ -3,30 +3,30 @@ BINDIR		= $(PREFIX)/bin
 MANDIR		= $(PREFIX)/share/man
 
 TARGET		= edt
-SRC		= src
-SRC_FILES	= $(wildcard $(SRC)/*.cpp)
-OBJ_FILES	= $(patsubst $(SRC)/%.cpp,$(SRC)/%.o,$(SRC_FILES))
+TARGETDIR	= bin
+BUILDDIR	= build
+SRCDIR		= src
+SRC_FILES	= $(wildcard $(SRCDIR)/*.cpp)
+OBJ_FILES	= $(patsubst $(SRCDIR)/%.cpp,$(BUILDDIR)/%.o,$(SRC_FILES))
 
 CXX		= g++
-CXXLIBS		= -lncursesw
+CXXLIBS		= -lncurses
 CXXFLAGS	= -Wall -Wextra -Wpedantic
-CXXFLAGSPROG    = -DTARGET=\"$(TARGET)\"
-#CXXFLAGSDEBUG	= -g
+CXXFLAGSPROG	= -DTARGET=\"$(TARGET)\"
+CXXFLAGSDEBUG	= -g
 #CXXLIBSSTATIC	= -static
 
-#FEATURES	=
-
 $(TARGET): $(OBJ_FILES)
-	$(CXX) $(CXXFLAGS) $(CXXFLAGSDEBUG) $(OBJ_FILES) $(CXXLIBSSTATIC) $(CXXLIBS) -o $(TARGET)
+	$(CXX) $(CXXFLAGS) $(CXXFLAGSDEBUG) $(OBJ_FILES) $(CXXLIBSSTATIC) -o $(TARGETDIR)/$(TARGET) $(CXXLIBS)
 
-$(SRC)/%.o: $(SRC)/%.cpp
-	$(CXX) $(CXXFLAGS) $(CXXFLAGSPROG) $(WARN) -c -o $@ $<
+$(BUILDDIR)/%.o: $(SRCDIR)/%.cpp
+	$(CXX) $(CXXFLAGS) $(CXXFLAGSPROG) -c -o $@ $<
 
 clean:
-	rm -f $(SRC)/*.o $(TARGET)
+	rm -f $(BUILDDIR)/*.o $(TARGETDIR)/$(TARGET)
 
 install: $(TARGET)
-	cp $(TARGET) $(BINDIR)/$(TARGET)
+	cp $(TARGETDIR)/$(TARGET) $(BINDIR)/$(TARGET)
 
 uninstall:
 	rm -f $(BINDIR)/$(TARGET)
