@@ -105,6 +105,30 @@ void edt_open(edt_state *edt, char* pathname)
 	edt->pathname = pathname;
 }
 
+void edt_write(edt_state *edt)
+{
+	int fd;
+
+	if ((fd = open(edt->pathname, O_WRONLY)) == -1) {
+		err(EXIT_FAILURE, "%s", edt->pathname); // TODO err handling
+	}
+
+	size_t c_buf = strlen(edt->buf);
+
+	if (write(fd, edt->buf, c_buf) == -1) {
+		err(EXIT_FAILURE, "%s", edt->pathname); // TODO err handling
+	}
+
+	if (close(fd) == -1) {
+		err(EXIT_FAILURE, "%s", edt->pathname); // TODO err handling
+	}
+
+	wmove(edt->wstatus, 0, 0);
+	wclrtoeol(edt->wstatus);
+	wprintw(edt->wstatus, "\"%s\" %ldB (written) %ldR", edt->pathname, c_buf, edt->nbuf);
+	wrefresh(edt->wstatus);
+}
+
 void edt_event_left(edt_state *edt)
 {
 	if (edt->p_buf == edt->buf) {
@@ -286,9 +310,9 @@ int main (int argc, char *argv[])
 			case KEY_END:
 				edt_event_end(&edt);
 			break;
-			/*case ctrl('s'):
-				edt_write(state);
-			break;*/
+			case ctrl('s'):
+				edt_write(&edt);
+			break;
 			default:
 				edt_event_write(&edt);
 		}
