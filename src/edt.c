@@ -189,6 +189,20 @@ void edt_event_end(edt_state *edt)
 	edt->p_buf = pos;
 }
 
+void edt_event_up(edt_state *edt)
+{
+	// TODO try to increment to current x pos
+	edt_event_home(edt);
+	edt_event_left(edt);
+}
+
+void edt_event_down(edt_state *edt)
+{
+	// TODO try to increment to current x pos
+	edt_event_end(edt);
+	edt_event_right(edt);
+}
+
 void edt_event_write(edt_state *edt)
 {
 	if(!(edt->key == 10 || edt->key == 9 || (edt->key >= 32 && edt->key <= 126))) {
@@ -248,12 +262,12 @@ int main (int argc, char *argv[])
 			case KEY_RIGHT:
 				edt_event_right(&edt);
 			break;
-			/*case KEY_UP:
-				event_up(state);
-			break;*/
-			/*case KEY_DOWN:
-				event_down(state);
-			break;*/
+			case KEY_UP:
+				edt_event_up(&edt);
+			break;
+			case KEY_DOWN:
+				edt_event_down(&edt);
+			break;
 			/*case KEY_PPAGE:
 				event_page_up(state);
 			break;*/
