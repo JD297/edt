@@ -26,7 +26,14 @@ typedef struct edt_state {
 	size_t nbuf;
 
 	char *p_buf;
+
+	int entry_line;
 } edt_state;
+
+void edt_state_init(edt_state *edt)
+{
+	edt->entry_line = 0;
+}
 
 #define EDT_WSTATUS_HEIGHT 1
 
@@ -35,13 +42,12 @@ void edt_state_init_windows(edt_state *edt)
 	int maxx = getmaxx(stdscr);
 	int maxy = getmaxy(stdscr);
 
-	edt->weditor = newwin(maxy - EDT_WSTATUS_HEIGHT, maxx, 0, 0);
+	edt->weditor = newpad(3000, 3000); // TODO resize if needed
 	edt->wstatus = newwin(EDT_WSTATUS_HEIGHT, maxx, maxy - EDT_WSTATUS_HEIGHT, 0);
 
 	refresh();
 
-	keypad(edt->weditor, true);
-	scrollok(edt->weditor, true);
+	keypad(stdscr, true);
 }
 
 void ncurses_init()
@@ -66,6 +72,7 @@ void edt_display(edt_state *edt)
 	}
 
 	wmove(edt->weditor, y, x);
+	prefresh(edt->weditor, edt->entry_line, 0, 0, 0, getmaxy(stdscr) - EDT_WSTATUS_HEIGHT - 1, getmaxx(stdscr) - 1);
 }
 
 void edt_open(edt_state *edt, char* pathname)
@@ -227,6 +234,21 @@ void edt_event_down(edt_state *edt)
 	edt_event_right(edt);
 }
 
+void edt_event_page_up(edt_state *edt)
+{
+	edt->entry_line -= getmaxy(stdscr) - EDT_WSTATUS_HEIGHT;
+
+	if (edt->entry_line < 0) {
+		edt->entry_line = 0;
+	}
+}
+
+void edt_event_page_down(edt_state *edt)
+{
+	// TODO calc max lines
+	edt->entry_line += getmaxy(stdscr) - EDT_WSTATUS_HEIGHT;
+}
+
 void edt_event_write(edt_state *edt)
 {
 	if(!(edt->key == 10 || edt->key == 9 || (edt->key >= 32 && edt->key <= 126))) {
@@ -268,6 +290,7 @@ int main (int argc, char *argv[])
 
 	ncurses_init();
 
+	edt_state_init(&edt);
 	edt_state_init_windows(&edt);
 
 	wprintw(edt.wstatus, "\"%s\" %ldB %ldR", edt.pathname, edt.sb.st_size, edt.nbuf);
@@ -276,7 +299,7 @@ int main (int argc, char *argv[])
 	while (edt.key != ctrl('x')) {
 		edt_display(&edt);
 
-		edt.key = wgetch(edt.weditor);
+		edt.key = getch();
 
 		switch(edt.key)
 		{
@@ -292,12 +315,12 @@ int main (int argc, char *argv[])
 			case KEY_DOWN:
 				edt_event_down(&edt);
 			break;
-			/*case KEY_PPAGE:
-				event_page_up(state);
-			break;*/
-			/*case KEY_NPAGE:
-				event_page_down(state);
-			break;*/
+			case KEY_PPAGE:
+				edt_event_page_up(&edt);
+			break;
+			case KEY_NPAGE:
+				edt_event_page_down(&edt);
+			break;
 			case KEY_BACKSPACE:
 				edt_event_backspace(&edt);
 			break;
