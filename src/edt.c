@@ -59,7 +59,7 @@ void ncurses_init()
 
 void edt_display(edt_state *edt)
 {
-	wclear(edt->weditor);
+	wmove(edt->weditor, 0, 0);
 
 	int x, y;
 
@@ -67,7 +67,6 @@ void edt_display(edt_state *edt)
 		if (i == edt->p_buf) {
 			getyx(edt->weditor, y, x);
 		}
-
 		wprintw(edt->weditor, "%c", *i);
 	}
 
