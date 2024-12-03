@@ -61,16 +61,20 @@ void edt_display(edt_state *edt)
 {
 	wmove(edt->weditor, 0, 0);
 
-	int x, y;
+	int x, y, saved_position = 0;
 
 	for (char *i = edt->buf; *i != '\0'; i++) {
 		if (i == edt->p_buf) {
 			getyx(edt->weditor, y, x);
+			saved_position = 1;
 		}
 		wprintw(edt->weditor, "%c", *i);
 	}
 
-	wmove(edt->weditor, y, x);
+	if (saved_position == 1) {
+		wmove(edt->weditor, y, x);
+	}
+
 	prefresh(edt->weditor, edt->entry_line, 0, 0, 0, getmaxy(stdscr) - EDT_WSTATUS_HEIGHT - 1, getmaxx(stdscr) - 1);
 }
 
@@ -211,7 +215,7 @@ void edt_event_end(edt_state *edt)
 	char *pos = strstr(edt->p_buf, "\n");
 
 	if (pos == NULL) {
-		// TODO set to end of buf
+		edt->p_buf = edt->buf + strlen(edt->buf);
 
 		return;
 	}
@@ -237,8 +241,11 @@ void edt_event_page_up(edt_state *edt)
 {
 	edt->entry_line -= getmaxy(stdscr) - EDT_WSTATUS_HEIGHT;
 
+	// TODO set edt->p_buf (normal case)
+
 	if (edt->entry_line < 0) {
 		edt->entry_line = 0;
+		edt->p_buf = edt->buf;
 	}
 }
 
@@ -246,6 +253,10 @@ void edt_event_page_down(edt_state *edt)
 {
 	// TODO calc max lines
 	edt->entry_line += getmaxy(stdscr) - EDT_WSTATUS_HEIGHT;
+
+	// TODO set edt->p_buf (normal case)
+
+	// TODO set edt->p_buf (eof case)
 }
 
 void edt_event_write(edt_state *edt)
