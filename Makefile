@@ -10,14 +10,12 @@ SRC_FILES	= $(wildcard $(SRCDIR)/*.c)
 OBJ_FILES	= $(patsubst $(SRCDIR)/%.c,$(BUILDDIR)/%.o,$(SRC_FILES))
 
 CC		= gcc
-CCLIBS		= -lncurses
-CCFLAGS		= -Wall -Wextra -Wpedantic
+CCLIBS		= -static -lncurses -ltinfo
+CCFLAGS		= -Wall -Wextra -Wpedantic -g
 CCFLAGSPROG	= -DTARGET=\"$(TARGET)\"
-CCFLAGSDEBUG	= -g
-#CCLIBSSTATIC	= -static
 
 $(TARGET): $(OBJ_FILES)
-	$(CC) $(CCFLAGS) $(CCFLAGSDEBUG) $(OBJ_FILES) $(CCLIBSSTATIC) -o $(TARGETDIR)/$(TARGET) $(CCLIBS)
+	$(CC) $(CCFLAGS) $(OBJ_FILES) -o $(TARGETDIR)/$(TARGET) $(CCLIBS)
 
 $(BUILDDIR)/%.o: $(SRCDIR)/%.c
 	$(CC) $(CCFLAGS) $(CCFLAGSPROG) -c -o $@ $<

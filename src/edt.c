@@ -78,7 +78,7 @@ char *edt_pbuf_screen_lastline(edt_state *edt)
 {
 	char *pbuf_screen_lastline = edt->buf;
 
-	for (int i = 0; i < edt->entryline + getmaxy(stdscr) - EDT_WSTATUS_HEIGHT; i++) {
+	for (int i = 1; i < edt->entryline + getmaxy(stdscr) - EDT_WSTATUS_HEIGHT; i++) {
 		char *line = strstr(pbuf_screen_lastline, "\n");
 
 		if (line == NULL) {
@@ -89,6 +89,42 @@ char *edt_pbuf_screen_lastline(edt_state *edt)
 	}
 
 	return pbuf_screen_lastline;
+}
+
+#define edt_pbuf_buf_firstline(EDT) EDT->buf
+
+char *edt_pbuf_buf_lastline(edt_state *edt)
+{
+	char *pbuf_buf_lastline = edt->buf;
+
+        while (1) {
+                char *line = strstr(pbuf_buf_lastline, "\n");
+
+                if (line == NULL) {
+                        break;
+                }
+
+                pbuf_buf_lastline = line + 1;
+        }
+
+        return pbuf_buf_lastline;
+}
+
+char *edt_pbuf_currentline(edt_state *edt)
+{
+	char *pbuf_currentline = edt->buf;
+
+	while (1) {
+		char *line = strstr(pbuf_currentline, "\n");
+
+		if (line == NULL || line >= edt->p_buf) {
+			break;
+		}
+
+		pbuf_currentline = line +1;
+	}
+
+	return pbuf_currentline;
 }
 
 int edt_count_lines(edt_state *edt)
@@ -274,6 +310,10 @@ void edt_event_end(edt_state *edt)
 
 void edt_event_up(edt_state *edt)
 {
+	if (edt_pbuf_entryline(edt) == edt_pbuf_currentline(edt) && edt_pbuf_buf_firstline(edt) != edt_pbuf_currentline(edt)) {
+		edt->entryline--;
+	}
+
 	// TODO try to increment to current x pos
 	edt_event_home(edt);
 	edt_event_left(edt);
@@ -281,6 +321,10 @@ void edt_event_up(edt_state *edt)
 
 void edt_event_down(edt_state *edt)
 {
+	if (edt_pbuf_screen_lastline(edt) == edt_pbuf_currentline(edt) && edt_pbuf_buf_lastline(edt) != edt_pbuf_currentline(edt)) {
+		edt->entryline++;
+	}
+
 	// TODO try to increment to current x pos
 	edt_event_end(edt);
 	edt_event_right(edt);
