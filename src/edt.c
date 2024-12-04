@@ -202,25 +202,22 @@ void edt_open(edt_state *edt, char* pathname)
 
 void edt_write(edt_state *edt)
 {
-	int fd;
+	FILE *fp;
 
-	if ((fd = open(edt->pathname, O_WRONLY)) == -1) {
-		err(EXIT_FAILURE, "%s", edt->pathname); // TODO err handling
+	if (!(fp = fopen(edt->pathname, "w"))) {
+		err(EXIT_FAILURE, "%s", edt->pathname); // TODO err handling (WSTATUS)
 	}
 
-	size_t c_buf = strlen(edt->buf);
+	size_t c_buf = fwrite(edt->buf, sizeof(char), strlen(edt->buf), fp);
 
-	if (write(fd, edt->buf, c_buf) == -1) {
-		err(EXIT_FAILURE, "%s", edt->pathname); // TODO err handling
-	}
-
-	if (close(fd) == -1) {
-		err(EXIT_FAILURE, "%s", edt->pathname); // TODO err handling
+	if (fclose(fp) == EOF) {
+		err(EXIT_FAILURE, "%s", edt->pathname); // TODO err handling (WSTATUS)
 	}
 
 	wmove(edt->wstatus, 0, 0);
 	wclrtoeol(edt->wstatus);
-	wprintw(edt->wstatus, "\"%s\" %ldB (written) %ldR", edt->pathname, c_buf, edt->nbuf);
+	// TODO WSTATUS PRINT
+	wprintw(edt->wstatus, "\"%s\" %dL, %ldB (written) %ldR", edt->pathname, edt_count_lines(edt), c_buf, edt->nbuf);
 	wrefresh(edt->wstatus);
 }
 
@@ -258,6 +255,8 @@ void edt_event_backspace(edt_state *edt)
 	}
 
 	memmove(edt->p_buf - 1, edt->p_buf, strlen(edt->p_buf));
+
+	memset(edt->p_buf + strlen(edt->p_buf) - 1, 0, 1);
 
 	edt->p_buf--;
 }
@@ -401,6 +400,7 @@ int main (int argc, char *argv[])
 	edt_state_init(&edt);
 	edt_state_init_windows(&edt);
 
+	// TODO WSTATUS
 	wprintw(edt.wstatus, "\"%s\" %dL, %ldB (%ldR)", edt.pathname, edt_count_lines(&edt), edt.sb.st_size, edt.nbuf);
 	wrefresh(edt.wstatus);
 
