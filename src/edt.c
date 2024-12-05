@@ -156,6 +156,8 @@ void edt_display(edt_state *edt)
 		wprintw(edt->weditor, "%c", *i);
 	}
 
+	wclrtobot(edt->weditor);
+
 	if (saved_position == 1) {
 		wmove(edt->weditor, y, x);
 	}
