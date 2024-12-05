@@ -1,7 +1,10 @@
+#define _GNU_SOURCE
+
 #include <curses.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,21 +31,27 @@ typedef struct edt_state {
 	char *p_buf;
 
 	int entryline;
+
+	int weditor_lines;
+	int weditor_cols;
 } edt_state;
 
 void edt_state_init(edt_state *edt)
 {
 	edt->entryline = 0;
+	edt->weditor_lines = 0;
+	edt->weditor_cols = 0;
 }
 
 #define EDT_WSTATUS_HEIGHT 1
+#define EDT_WEDITOR_HEIGHT getmaxy(stdscr) - EDT_WSTATUS_HEIGHT
 
 void edt_state_init_windows(edt_state *edt)
 {
 	int maxx = getmaxx(stdscr);
 	int maxy = getmaxy(stdscr);
 
-	edt->weditor = newpad(3000, 3000); // TODO resize if needed
+	edt->weditor = newpad(edt->weditor_lines + EDT_WEDITOR_HEIGHT, edt->weditor_cols + maxx);
 	edt->wstatus = newwin(EDT_WSTATUS_HEIGHT, maxx, maxy - EDT_WSTATUS_HEIGHT, 0);
 
 	refresh();
@@ -50,11 +59,33 @@ void edt_state_init_windows(edt_state *edt)
 	keypad(stdscr, true);
 }
 
+void edt_wstatus_print(edt_state *edt, const char *fmt, ...)
+{
+	wclear(edt->wstatus);
+
+	va_list ap;
+
+	va_start(ap, fmt);
+
+	vw_printw(edt->wstatus, fmt, ap);
+
+	wrefresh(edt->wstatus);
+}
+
 void ncurses_init()
 {
 	initscr();
 	noecho();
 	raw();
+}
+
+size_t edt_pbuf_offset(edt_state *edt)
+{
+	size_t offset;
+
+	for (offset = 0; edt->buf + offset != edt->p_buf ; offset++);
+
+	return offset;
 }
 
 char *edt_pbuf_entryline(edt_state *edt)
@@ -78,7 +109,7 @@ char *edt_pbuf_screen_lastline(edt_state *edt)
 {
 	char *pbuf_screen_lastline = edt->buf;
 
-	for (int i = 1; i < edt->entryline + getmaxy(stdscr) - EDT_WSTATUS_HEIGHT; i++) {
+	for (int i = 1; i < edt->entryline + EDT_WEDITOR_HEIGHT; i++) {
 		char *line = strstr(pbuf_screen_lastline, "\n");
 
 		if (line == NULL) {
@@ -90,6 +121,8 @@ char *edt_pbuf_screen_lastline(edt_state *edt)
 
 	return pbuf_screen_lastline;
 }
+
+#define edt_pbuf_last_entryline(EDT) EDT->weditor_lines - EDT_WEDITOR_HEIGHT
 
 #define edt_pbuf_buf_firstline(EDT) EDT->buf
 
@@ -127,6 +160,8 @@ char *edt_pbuf_currentline(edt_state *edt)
 	return pbuf_currentline;
 }
 
+#define edt_pbuf_end(EDT) EDT->buf + strlen(EDT->buf)
+
 int edt_count_lines(edt_state *edt)
 {
 	char *line = edt->buf;
@@ -139,6 +174,34 @@ int edt_count_lines(edt_state *edt)
 		}
 
 		line = line + 1;
+	}
+}
+
+void edt_weditor_lines_cols(edt_state *edt)
+{
+	char *previous = edt->buf;
+	char *line;
+
+	for (int i = 0;  ; i++) {
+		line = strstr(previous, "\n");
+
+		if (line == NULL) {
+			edt->weditor_lines = i;
+
+			break;
+		}
+
+		*line = '\0';
+
+		size_t cols = strlen(previous);
+
+		if ((int)cols > edt->weditor_cols) {
+			edt->weditor_cols = (int)cols;
+		}
+
+		*line = '\n';
+
+		previous = line + 1;
 	}
 }
 
@@ -162,8 +225,10 @@ void edt_display(edt_state *edt)
 		wmove(edt->weditor, y, x);
 	}
 
-	prefresh(edt->weditor, edt->entryline, 0, 0, 0, getmaxy(stdscr) - EDT_WSTATUS_HEIGHT - 1, getmaxx(stdscr) - 1);
+	prefresh(edt->weditor, edt->entryline, 0, 0, 0, EDT_WEDITOR_HEIGHT - 1, getmaxx(stdscr) - 1);
 }
+
+#define EDT_RESERVED_PAGES_FACTOR 2
 
 void edt_open(edt_state *edt, char* pathname)
 {
@@ -182,7 +247,7 @@ void edt_open(edt_state *edt, char* pathname)
 		err(EXIT_FAILURE, "%s", pathname);
 	}
 
-	edt->nbuf = ((edt->sb.st_size / sysconf(_SC_PAGESIZE)) + 1) * 4 * sysconf(_SC_PAGESIZE);
+	edt->nbuf = ((edt->sb.st_size / sysconf(_SC_PAGESIZE)) + 1) * EDT_RESERVED_PAGES_FACTOR * sysconf(_SC_PAGESIZE);
 	edt->buf = (char *)mmap(NULL, edt->nbuf, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
 
 	if (edt->buf == MAP_FAILED) {
@@ -200,6 +265,8 @@ void edt_open(edt_state *edt, char* pathname)
 	}
 
 	edt->pathname = pathname;
+
+	edt_weditor_lines_cols(edt);
 }
 
 void edt_write(edt_state *edt)
@@ -207,20 +274,18 @@ void edt_write(edt_state *edt)
 	FILE *fp;
 
 	if (!(fp = fopen(edt->pathname, "w"))) {
-		err(EXIT_FAILURE, "%s", edt->pathname); // TODO err handling (WSTATUS)
+		edt_wstatus_print(edt, "\"%s\": error: %s", edt->pathname, strerror(errno));
+		return;
 	}
 
 	size_t c_buf = fwrite(edt->buf, sizeof(char), strlen(edt->buf), fp);
 
 	if (fclose(fp) == EOF) {
-		err(EXIT_FAILURE, "%s", edt->pathname); // TODO err handling (WSTATUS)
+		edt_wstatus_print(edt, "\"%s\": error: %s", edt->pathname, strerror(errno));
+		return;
 	}
 
-	wmove(edt->wstatus, 0, 0);
-	wclrtoeol(edt->wstatus);
-	// TODO WSTATUS PRINT
-	wprintw(edt->wstatus, "\"%s\" %dL, %ldB (written) %ldR", edt->pathname, edt_count_lines(edt), c_buf, edt->nbuf);
-	wrefresh(edt->wstatus);
+	edt_wstatus_print(edt, "\"%s\" %dL, %ldB (written) %ldR", edt->pathname, edt->weditor_lines, c_buf, edt->nbuf);
 }
 
 void edt_event_left(edt_state *edt)
@@ -301,7 +366,7 @@ void edt_event_end(edt_state *edt)
 	char *pos = strstr(edt->p_buf, "\n");
 
 	if (pos == NULL) {
-		edt->p_buf = edt->buf + strlen(edt->buf); // TODO USE THIS AS A MACRO
+		edt->p_buf = edt_pbuf_end(edt);
 
 		return;
 	}
@@ -333,7 +398,7 @@ void edt_event_down(edt_state *edt)
 
 void edt_event_page_up(edt_state *edt)
 {
-	edt->entryline -= getmaxy(stdscr) - EDT_WSTATUS_HEIGHT;
+	edt->entryline -= EDT_WEDITOR_HEIGHT;
 
 	if (edt->entryline < 0) {
 		edt->entryline = 0;
@@ -347,13 +412,13 @@ void edt_event_page_up(edt_state *edt)
 
 void edt_event_page_down(edt_state *edt)
 {
-	if (edt->entryline >= edt_count_lines(edt) - getmaxy(stdscr) - EDT_WSTATUS_HEIGHT) { // TODO MACRO
+	if (edt->entryline >= edt_pbuf_last_entryline(edt)) {
 		edt->p_buf = edt_pbuf_screen_lastline(edt);
 
 		return;
 	}
 
-	edt->entryline += getmaxy(stdscr) - EDT_WSTATUS_HEIGHT; // TODO add MACRO FOR THIS
+	edt->entryline += EDT_WEDITOR_HEIGHT;
 
 	edt->p_buf = edt_pbuf_entryline(edt);
 }
@@ -364,9 +429,19 @@ void edt_event_write(edt_state *edt)
 		return;
 	}
 
-	if (edt->nbuf <= strlen(edt->buf)) {
-		// TODO mremap
-		return;
+	if (edt->nbuf <= strlen(edt->buf) + 1) {
+		size_t pbuf_offset = edt_pbuf_offset(edt);
+		size_t rbuf = edt->nbuf * 2;
+
+		if ((edt->buf = mremap(edt->buf, edt->nbuf, rbuf, MREMAP_MAYMOVE)) == MAP_FAILED) {
+			edt_wstatus_print(edt, "%s: error: %s", TARGET, strerror(errno));
+			return;
+		}
+
+		edt_wstatus_print(edt, "\"%s\" %dL, %ldB (%ldR REMAPED)", edt->pathname, edt->weditor_lines, edt->sb.st_size, edt->nbuf);
+
+		edt->nbuf = rbuf;
+		edt->p_buf = edt->buf + pbuf_offset;
 	}
 
 	memmove(edt->p_buf + 1, edt->p_buf, strlen(edt->p_buf));
@@ -374,6 +449,12 @@ void edt_event_write(edt_state *edt)
 	*edt->p_buf = (char)edt->key;
 
 	edt->p_buf++;
+
+	if (edt->key == 10/* || edt_pbuf_cols(edt) >= edt->weditor_cols*/) { //TODO
+		edt_weditor_lines_cols(edt);
+
+		edt->weditor = newpad(edt->weditor_lines + EDT_WEDITOR_HEIGHT, edt->weditor_cols + getmaxx(stdscr));
+	}
 }
 
 void print_usage()
@@ -394,17 +475,15 @@ int main (int argc, char *argv[])
 	}
 
 	edt_state edt;
+	edt_state_init(&edt);
 
 	edt_open(&edt, argv[1]);
 
 	ncurses_init();
 
-	edt_state_init(&edt);
 	edt_state_init_windows(&edt);
 
-	// TODO WSTATUS
-	wprintw(edt.wstatus, "\"%s\" %dL, %ldB (%ldR)", edt.pathname, edt_count_lines(&edt), edt.sb.st_size, edt.nbuf);
-	wrefresh(edt.wstatus);
+	edt_wstatus_print(&edt, "\"%s\" %dL, %ldB (%ldR)", edt.pathname, edt.weditor_lines, edt.sb.st_size, edt.nbuf);
 
 	while (edt.key != ctrl('x')) {
 		edt_display(&edt);
@@ -451,11 +530,11 @@ int main (int argc, char *argv[])
 		}
 	}
 
+	endwin();
+
 	if (munmap(edt.buf, edt.nbuf) == -1) {
 		err(EXIT_FAILURE, "%s", edt.pathname);
 	}
-
-	endwin();
 
 	return 0;
 }
