@@ -79,14 +79,7 @@ void ncurses_init()
 	raw();
 }
 
-size_t edt_pbuf_offset(edt_state *edt)
-{
-	size_t offset;
-
-	for (offset = 0; edt->buf + offset != edt->p_buf ; offset++);
-
-	return offset;
-}
+#define edt_pbuf_offset(EDT) edt->p_buf - edt->buf
 
 char *edt_pbuf_entryline(edt_state *edt)
 {
