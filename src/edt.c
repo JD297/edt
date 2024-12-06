@@ -444,6 +444,8 @@ void edt_event_write(edt_state *edt)
 	edt->p_buf++;
 
 	if (edt->key == 10/* || edt_pbuf_cols(edt) >= edt->weditor_cols*/) { //TODO
+		// TODO IF 10 THEN CHECK FOR SCROLLING!
+
 		edt_weditor_lines_cols(edt);
 
 		edt->weditor = newpad(edt->weditor_lines + EDT_WEDITOR_HEIGHT, edt->weditor_cols + getmaxx(stdscr));
