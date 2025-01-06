@@ -1,6 +1,7 @@
 #define _GNU_SOURCE
 
-#include <curses.h>
+#include "getch.h"
+
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -8,17 +9,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <termios.h>
 #include <unistd.h>
 
-#define ctrl(x) ((x) & 0x1f)
-
 typedef struct edt_state {
-	WINDOW* weditor;
-	WINDOW* wstatus;
-
 	int key;
+	
+	enum {
+	    ALL,
+	    CURRENT_LINE
+	} display_mode;
 
 	struct stat sb;
 
@@ -33,32 +36,31 @@ typedef struct edt_state {
 	int entryline;
 
 	int weditor_lines;
-	int weditor_cols;
+    int weditor_cols;
+
+	struct winsize win;
 } edt_state;
 
 void edt_state_init(edt_state *edt)
 {
 	edt->entryline = 0;
 	edt->weditor_lines = 0;
-	edt->weditor_cols = 0;
+    edt->weditor_cols = 0;
+    edt->display_mode = ALL;
 }
 
 #define EDT_WSTATUS_HEIGHT 1
-#define EDT_WEDITOR_HEIGHT getmaxy(stdscr) - EDT_WSTATUS_HEIGHT
+#define EDT_WEDITOR_HEIGHT edt->win.ws_row - EDT_WSTATUS_HEIGHT
+
 
 void edt_state_init_windows(edt_state *edt)
 {
-	int maxx = getmaxx(stdscr);
-	int maxy = getmaxy(stdscr);
-
-	edt->weditor = newpad(edt->weditor_lines + EDT_WEDITOR_HEIGHT, edt->weditor_cols + maxx);
-	edt->wstatus = newwin(EDT_WSTATUS_HEIGHT, maxx, maxy - EDT_WSTATUS_HEIGHT, 0);
-
-	refresh();
-
-	keypad(stdscr, true);
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &edt->win) == -1) {
+        err(EXIT_FAILURE, "%s", "ioctl");
+    }
 }
 
+/*
 void edt_wstatus_print(edt_state *edt, const char *fmt, ...)
 {
 	wclear(edt->wstatus);
@@ -71,13 +73,7 @@ void edt_wstatus_print(edt_state *edt, const char *fmt, ...)
 
 	wrefresh(edt->wstatus);
 }
-
-void ncurses_init()
-{
-	initscr();
-	noecho();
-	raw();
-}
+*/
 
 #define edt_pbuf_offset(EDT) edt->p_buf - edt->buf
 
@@ -198,27 +194,83 @@ void edt_weditor_lines_cols(edt_state *edt)
 	}
 }
 
+#define edt_move(row, col) printf("\033[%d;%dH", (row), (col));
+
+#define ANSI_TERMINAL_CURSOR "\033[6n"
+
+void get_cursor_position(int *row, int *col)
+{
+    printf("%s", ANSI_TERMINAL_CURSOR);
+    fflush(stdout);
+
+    char buf[32];
+    int i = 0;
+
+    while (1) {
+        if (read(STDIN_FILENO, &buf[i], 1) != 1) {
+            break;
+        }
+
+        if (buf[i] == 'R') {
+            break;
+        }
+
+        i++;
+    }
+
+    buf[i] = '\0';
+
+    if (buf[0] == '\033' && buf[1] == '[') {
+        sscanf(buf + 2, "%d;%d", row, col);
+    }
+}
+
+#define ANSI_TERMINAL_CLRTOBOT "\033[J"
+
+#define ANSI_TERMINAL_CLRLINE "\033[K"
+
+#define ANSI_TERMINAL_CLEAR "\033[2J\033[H"
+
+#define ANSI_TERMINAL_LINE_BEGIN "\033[1G"
+
 void edt_display(edt_state *edt)
 {
-	wmove(edt->weditor, 0, 0);
+    //int x = 1;
+    //int y = 1;
 
-	int x, y, saved_position = 0;
+    switch (edt->display_mode) {
+        case ALL: {
+            edt_move(1, 1);
 
-	for (char *i = edt->buf; *i != '\0'; i++) {
-		if (i == edt->p_buf) {
-			getyx(edt->weditor, y, x);
-			saved_position = 1;
-		}
-		wprintw(edt->weditor, "%c", *i);
-	}
+            printf("%s", ANSI_TERMINAL_CLEAR);
 
-	wclrtobot(edt->weditor);
+            printf("%.*s", edt_pbuf_screen_lastline(edt) - edt_pbuf_entryline(edt), edt_pbuf_entryline(edt));
 
-	if (saved_position == 1) {
-		wmove(edt->weditor, y, x);
-	}
-
-	prefresh(edt->weditor, edt->entryline, 0, 0, 0, EDT_WEDITOR_HEIGHT - 1, getmaxx(stdscr) - 1);
+            edt_move(1, 1);
+        } break;
+        case CURRENT_LINE: {
+            edt_move(1, 1);
+            //printf("%s", ANSI_TERMINAL_CLRTOBOT);
+        
+            printf("%.*s", edt->p_buf - edt_pbuf_entryline(edt), edt_pbuf_entryline(edt));
+            
+            //get_cursor_position(&y, &x);
+            printf("\033[s");
+            //fflush(stdout);
+        
+            printf("%s", ANSI_TERMINAL_LINE_BEGIN);
+            printf("%s", ANSI_TERMINAL_CLRLINE);
+            
+            
+            printf("%.*s", edt_pbuf_screen_lastline(edt) - edt_pbuf_currentline(edt), edt_pbuf_currentline(edt));
+            
+            printf("\033[u");
+        } break;
+    }
+    
+	fflush(stdout);
+	
+	edt->display_mode = CURRENT_LINE;
 }
 
 #define EDT_RESERVED_PAGES_FACTOR 2
@@ -240,8 +292,15 @@ void edt_open(edt_state *edt, char* pathname)
 		err(EXIT_FAILURE, "%s", pathname);
 	}
 
-	edt->nbuf = ((edt->sb.st_size / sysconf(_SC_PAGESIZE)) + 1) * EDT_RESERVED_PAGES_FACTOR * sysconf(_SC_PAGESIZE);
-	edt->buf = (char *)mmap(NULL, edt->nbuf, PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+	edt->nbuf = ((edt->sb.st_size / sysconf(_SC_PAGESIZE)) + 1) 
+	* EDT_RESERVED_PAGES_FACTOR * sysconf(_SC_PAGESIZE);
+
+	edt->buf = (char *)mmap(NULL,
+	                        edt->nbuf,
+	                        PROT_READ | PROT_WRITE,
+	                        MAP_ANONYMOUS | MAP_PRIVATE,
+	                        -1,
+	                        0);
 
 	if (edt->buf == MAP_FAILED) {
 		err(EXIT_FAILURE, "%s", pathname);
@@ -267,18 +326,18 @@ void edt_write(edt_state *edt)
 	FILE *fp;
 
 	if (!(fp = fopen(edt->pathname, "w"))) {
-		edt_wstatus_print(edt, "\"%s\": error: %s", edt->pathname, strerror(errno));
+		//edt_wstatus_print(edt, "\"%s\": error: %s", edt->pathname, strerror(errno));
 		return;
 	}
 
 	size_t c_buf = fwrite(edt->buf, sizeof(char), strlen(edt->buf), fp);
 
 	if (fclose(fp) == EOF) {
-		edt_wstatus_print(edt, "\"%s\": error: %s", edt->pathname, strerror(errno));
+		//edt_wstatus_print(edt, "\"%s\": error: %s", edt->pathname, strerror(errno));
 		return;
 	}
 
-	edt_wstatus_print(edt, "\"%s\" %dL, %ldB (written) %ldR", edt->pathname, edt->weditor_lines, c_buf, edt->nbuf);
+	//edt_wstatus_print(edt, "\"%s\" %dL, %ldB (written) %ldR", edt->pathname, edt->weditor_lines, c_buf, edt->nbuf);
 }
 
 void edt_event_left(edt_state *edt)
@@ -427,11 +486,11 @@ void edt_event_write(edt_state *edt)
 		size_t rbuf = edt->nbuf * 2;
 
 		if ((edt->buf = mremap(edt->buf, edt->nbuf, rbuf, MREMAP_MAYMOVE)) == MAP_FAILED) {
-			edt_wstatus_print(edt, "%s: error: %s", TARGET, strerror(errno));
+			//edt_wstatus_print(edt, "%s: error: %s", TARGET, strerror(errno));
 			return;
 		}
 
-		edt_wstatus_print(edt, "\"%s\" %dL, %ldB (%ldR REMAPED)", edt->pathname, edt->weditor_lines, edt->sb.st_size, edt->nbuf);
+		//edt_wstatus_print(edt, "\"%s\" %dL, %ldB (%ldR REMAPED)", edt->pathname, edt->weditor_lines, edt->sb.st_size, edt->nbuf);
 
 		edt->nbuf = rbuf;
 		edt->p_buf = edt->buf + pbuf_offset;
@@ -448,7 +507,7 @@ void edt_event_write(edt_state *edt)
 
 		edt_weditor_lines_cols(edt);
 
-		edt->weditor = newpad(edt->weditor_lines + EDT_WEDITOR_HEIGHT, edt->weditor_cols + getmaxx(stdscr));
+		// edt->weditor = newpad(edt->weditor_lines + EDT_WEDITOR_HEIGHT, edt->weditor_cols + getmaxx(stdscr));
 	}
 }
 
@@ -460,7 +519,11 @@ void print_usage()
 	fprintf(stderr, "JD297 %s source code <https://github.com/jd297/edt>\n", TARGET);
 }
 
-int main (int argc, char *argv[])
+#define ANSI_TERMINAL_ENTER_ALTERNATE_BUFFER "\033[?1049h"
+#define ANSI_TERMINAL_EXIT_ALTERNATE_BUFFER "\033[?1049l"
+
+
+int main(int argc, char *argv[])
 {
 	if(argc != 2)
 	{
@@ -474,13 +537,21 @@ int main (int argc, char *argv[])
 
 	edt_open(&edt, argv[1]);
 
-	ncurses_init();
+    struct termios oldt, newt;
+
+	tcgetattr(STDIN_FILENO, &oldt);
+    newt = oldt;
+    newt.c_lflag &= ~(ICANON | ECHO);
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+    cfmakeraw(&newt);
+    
+    write(STDOUT_FILENO, ANSI_TERMINAL_ENTER_ALTERNATE_BUFFER, strlen(ANSI_TERMINAL_ENTER_ALTERNATE_BUFFER));
 
 	edt_state_init_windows(&edt);
 
-	edt_wstatus_print(&edt, "\"%s\" %dL, %ldB (%ldR)", edt.pathname, edt.weditor_lines, edt.sb.st_size, edt.nbuf);
+	//edt_wstatus_print(&edt, "\"%s\" %dL, %ldB (%ldR)", edt.pathname, edt.weditor_lines, edt.sb.st_size, edt.nbuf);
 
-	while (edt.key != ctrl('x')) {
+	while (edt.key != KEY_CTRL('X')) {
 		edt_display(&edt);
 
 		edt.key = getch();
@@ -517,7 +588,7 @@ int main (int argc, char *argv[])
 			case KEY_END:
 				edt_event_end(&edt);
 			break;
-			case ctrl('s'):
+			case KEY_CTRL('s'):
 				edt_write(&edt);
 			break;
 			default:
@@ -525,7 +596,9 @@ int main (int argc, char *argv[])
 		}
 	}
 
-	endwin();
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    
+    write(STDOUT_FILENO, ANSI_TERMINAL_EXIT_ALTERNATE_BUFFER, strlen(ANSI_TERMINAL_EXIT_ALTERNATE_BUFFER));
 
 	if (munmap(edt.buf, edt.nbuf) == -1) {
 		err(EXIT_FAILURE, "%s", edt.pathname);

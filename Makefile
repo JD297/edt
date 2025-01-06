@@ -10,7 +10,7 @@ SRC_FILES	= $(wildcard $(SRCDIR)/*.c)
 OBJ_FILES	= $(patsubst $(SRCDIR)/%.c,$(BUILDDIR)/%.o,$(SRC_FILES))
 
 CC		= gcc
-CCLIBS		= -static -lncurses -ltinfo
+CCLIBS		= -static
 CCFLAGS		= -Wall -Wextra -Wpedantic -g
 CCFLAGSPROG	= -DTARGET=\"$(TARGET)\"
 
